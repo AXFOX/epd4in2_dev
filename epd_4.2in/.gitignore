@@ -3,3 +3,6 @@
 .vscode/c_cpp_properties.json
 .vscode/launch.json
 .vscode/ipch
+
+# WiFi 凭据 (含明文密码, 不入版本控制)
+src/wifi_config.h

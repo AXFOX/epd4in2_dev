@@ -78,14 +78,9 @@
 #include "Debug.h"
 
 // ============================================================
-// WiFi
+// WiFi — 凭据在 wifi_config.h (不入 git, 模板见 wifi_config.example.h)
 // ============================================================
-#ifndef WIFI_SSID
-#define WIFI_SSID      "Redmi_26F0"
-#endif
-#ifndef WIFI_PASS
-#define WIFI_PASS      "yuxiheshuaibo"
-#endif
+#include "wifi_config.h"
 
 // ============================================================
 // 图像数据常量
