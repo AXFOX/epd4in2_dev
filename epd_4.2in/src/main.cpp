@@ -70,6 +70,7 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 #include <ESP8266HTTPUpdateServer.h>
+#include <ESP8266mDNS.h>
 #include <WiFiClient.h>
 
 #include "DEV_Config.h"
@@ -368,6 +369,12 @@ static void setupWiFi(void)
         Debug(WiFi.localIP().toString().c_str());
         Debug("\r\n");
         WiFi.softAPdisconnect(true);
+
+        // mDNS for easy device discovery
+        if (MDNS.begin("epd-display")) {
+            MDNS.addService("http", "tcp", 80);
+            Debug("mDNS: epd-display.local\r\n");
+        }
     } else {
         Debug("WiFi fail, AP: EPD-Setup / 192.168.4.1\r\n");
     }
@@ -412,6 +419,7 @@ void setup()
 void loop()
 {
     httpServer.handleClient();
+    MDNS.update();
 
     // Handle raw TCP image connections
     WiFiClient raw = rawServer.accept();
