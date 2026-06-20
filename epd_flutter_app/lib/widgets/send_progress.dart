@@ -3,12 +3,14 @@ import 'package:flutter/material.dart';
 /// Send progress bar + action buttons + log output.
 class SendProgress extends StatelessWidget {
   final bool sending;
-  final int step;          // 0..5 (0=idle, 5=done)
+  final int step;
   final List<String> log;
   final VoidCallback? onSend;
   final VoidCallback? onClear;
   final VoidCallback? onSleep;
   final bool canSend;
+  final bool canClear;
+  final bool canSleep;
 
   const SendProgress({
     super.key,
@@ -19,6 +21,8 @@ class SendProgress extends StatelessWidget {
     this.onClear,
     this.onSleep,
     this.canSend = false,
+    this.canClear = false,
+    this.canSleep = false,
   });
 
   static const _stepLabels = [
@@ -38,40 +42,50 @@ class SendProgress extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.all(8),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(10),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Header
             Row(
               children: [
-                Icon(Icons.send, color: cs.primary),
-                const SizedBox(width: 8),
+                Icon(Icons.send, color: cs.primary, size: 18),
+                const SizedBox(width: 6),
                 Text('发送', style: theme.textTheme.titleSmall),
-                const Spacer(),
-                // Action buttons
-                TextButton.icon(
-                  onPressed: canSend && !sending ? onClear : null,
-                  icon: const Icon(Icons.cleaning_services, size: 16),
-                  label: const Text('清屏'),
+              ],
+            ),
+            const SizedBox(height: 6),
+            // Action buttons in a Wrap to avoid overflow
+            Wrap(
+              spacing: 4,
+              runSpacing: 4,
+              children: [
+                ActionChip(
+                  avatar: const Icon(Icons.cleaning_services, size: 16),
+                  label: const Text('清屏', style: TextStyle(fontSize: 12)),
+                  onPressed: (canClear && !sending) ? onClear : null,
+                  visualDensity: VisualDensity.compact,
                 ),
-                const SizedBox(width: 4),
-                TextButton.icon(
-                  onPressed: canSend && !sending ? onSleep : null,
-                  icon: const Icon(Icons.bedtime, size: 16),
-                  label: const Text('休眠'),
+                ActionChip(
+                  avatar: const Icon(Icons.bedtime, size: 16),
+                  label: const Text('休眠', style: TextStyle(fontSize: 12)),
+                  onPressed: (canSleep && !sending) ? onSleep : null,
+                  visualDensity: VisualDensity.compact,
                 ),
                 const SizedBox(width: 4),
                 FilledButton.icon(
-                  onPressed: canSend && !sending ? onSend : null,
+                  onPressed: (canSend && !sending) ? onSend : null,
                   icon: sending
                       ? const SizedBox(
-                          width: 14,
-                          height: 14,
+                          width: 14, height: 14,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.upload, size: 16),
-                  label: Text(sending ? '发送中...' : '发送到设备'),
+                  label: Text(sending ? '发送中...' : '发送到设备',
+                      style: const TextStyle(fontSize: 12)),
+                  style: FilledButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                  ),
                 ),
               ],
             ),

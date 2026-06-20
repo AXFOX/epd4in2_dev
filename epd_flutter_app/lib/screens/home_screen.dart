@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../models/device_status.dart';
 import '../models/converted_image.dart';
@@ -8,6 +9,9 @@ import '../widgets/device_toolbar.dart';
 import '../widgets/image_drop_zone.dart';
 import '../widgets/preview_panel.dart';
 import '../widgets/send_progress.dart';
+
+const _epdWidth = 400;
+const _epdHeight = 300;
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -93,7 +97,16 @@ class _HomeScreenState extends State<HomeScreen> {
         _convertedImage = converted;
         _converting = false;
       });
-      _logMessage('转换完成 ✓');
+      // Log pixel statistics for debugging
+      final blackPixels = _countColoredPixels(converted.blackTop) +
+          _countColoredPixels(converted.blackBottom);
+      final redPixels = _countColoredPixels(converted.redTop) +
+          _countColoredPixels(converted.redBottom);
+      final total = _epdWidth * _epdHeight;
+      _logMessage('转换完成 ✓ 黑色: $blackPixels/$total'
+          ' (${(blackPixels * 100 / total).toStringAsFixed(1)}%)'
+          ' 红色: $redPixels/$total'
+          ' (${(redPixels * 100 / total).toStringAsFixed(1)}%)');
     } catch (e) {
       _logMessage('转换失败: $e');
       setState(() => _converting = false);
@@ -161,6 +174,19 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  /// Count bits set to 0 (colored pixels) in a 1bpp buffer.
+  int _countColoredPixels(Uint8List buffer) {
+    int count = 0;
+    for (final byte in buffer) {
+      var b = byte;
+      b = (b & 0x55) + ((b >> 1) & 0x55);
+      b = (b & 0x33) + ((b >> 2) & 0x33);
+      b = (b & 0x0F) + ((b >> 4) & 0x0F);
+      count += 8 - b;
+    }
+    return count;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -215,6 +241,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           onClear: _clearDevice,
                           onSleep: _sleepDevice,
                           canSend: _convertedImage != null && _connected,
+                          canClear: _connected,
+                          canSleep: _connected,
                         ),
                       ),
                     ],

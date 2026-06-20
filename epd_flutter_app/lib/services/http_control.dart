@@ -21,17 +21,17 @@ class HttpControl {
 
   /// Trigger screen refresh: POST /display/refresh.
   Future<void> refresh() async {
-    await _post('/display/refresh');
+    await _post('/display/refresh', const Duration(seconds: 25));
   }
 
   /// Clear screen (all white): POST /display/clear.
   Future<void> clear() async {
-    await _post('/display/clear');
+    await _post('/display/clear', const Duration(seconds: 25));
   }
 
   /// Put display to sleep: POST /display/sleep.
   Future<void> sleep() async {
-    await _post('/display/sleep');
+    await _post('/display/sleep', const Duration(seconds: 10));
   }
 
   /// Draw text on the framebuffer: POST /display/text.
@@ -46,10 +46,10 @@ class HttpControl {
     }
   }
 
-  Future<void> _post(String path) async {
+  Future<void> _post(String path, [Duration timeout = const Duration(seconds: 5)]) async {
     final resp = await http
         .post(Uri.parse('$_base$path'))
-        .timeout(const Duration(seconds: 5));
+        .timeout(timeout);
     if (resp.statusCode != 200) {
       throw Exception('POST $path failed: ${resp.statusCode}');
     }

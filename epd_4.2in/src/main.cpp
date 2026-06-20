@@ -235,8 +235,10 @@ static void handleRawClient(WiFiClient &client)
  */
 static void handleDisplayRefresh(void)
 {
+    // Send response immediately — TurnOnDisplay blocks ~15s with ReadBusy().
+    // The response is flushed during delay() yields inside ReadBusy.
+    httpServer.send(200, "text/plain", "Refreshing...");
     EPD_4IN2B_V2_TurnOnDisplay();
-    httpServer.send(200, "text/plain", "Refreshed");
 }
 
 /**
@@ -244,8 +246,8 @@ static void handleDisplayRefresh(void)
  */
 static void handleDisplayClear(void)
 {
+    httpServer.send(200, "text/plain", "Clearing...");
     EPD_4IN2B_V2_Clear();
-    httpServer.send(200, "text/plain", "Cleared");
 }
 
 /**
@@ -253,8 +255,8 @@ static void handleDisplayClear(void)
  */
 static void handleDisplaySleep(void)
 {
+    httpServer.send(200, "text/plain", "Sleeping...");
     EPD_4IN2B_V2_Sleep();
-    httpServer.send(200, "text/plain", "Sleeping");
 }
 
 /**
