@@ -109,6 +109,9 @@ static UBYTE *g_ImgBuf = NULL;         // 7500-byte half-screen buffer
 // send both halves back-to-back (no SPI gap between halves).
 static bool g_BlackTopReady = false;
 static bool g_RedTopReady = false;
+static uint16_t g_TcpRxCount = 0;     // successful TCP transfers
+static uint16_t g_TcpErrorCount = 0;  // failed TCP transfers
+static uint8_t g_LastCmd = 0;
 
 static char g_WiFiSSID[32] = WIFI_SSID;
 static char g_WiFiPass[64] = WIFI_PASS;

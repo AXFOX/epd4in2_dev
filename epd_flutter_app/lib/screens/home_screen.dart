@@ -144,7 +144,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
       setState(() => _sendStep = 5);
       _logMessage('刷新显示...');
-      await _tcp!.sendRefresh();
+      await _http!.refresh();
 
       _logMessage('全部完成 ✓ (约需 15 秒刷新)');
     } catch (e) {

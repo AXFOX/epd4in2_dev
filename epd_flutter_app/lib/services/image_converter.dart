@@ -156,15 +156,21 @@ class ImageConverter {
   /// Three possible output colors for the e-paper.
 
   /// Classify an RGB value into one of the 3 e-paper colors.
+  ///
+  /// Prioritizes red channel: if a pixel has significant red component
+  /// compared to green/blue, it's classified as red regardless of brightness.
   _Label _classify(int r, int g, int b) {
-    // Euclidean distance to palette colors.
-    final dBlack = r * r + g * g + b * b;                      // to (0,0,0)
-    final dWhite = (255 - r) * (255 - r) + (255 - g) * (255 - g) + (255 - b) * (255 - b); // to (255,255,255)
-    final dRed = (255 - r) * (255 - r) + g * g + b * b;        // to (255,0,0)
+    // How "reddish" is the pixel? Red channel dominance over others.
+    final redness = r - (g + b) ~/ 2;
 
-    if (dBlack <= dWhite && dBlack <= dRed) return _Label.black;
-    if (dRed <= dWhite) return _Label.red;
-    return _Label.white;
+    // Strong red tint → classify as red (threshold: R must lead by 30+)
+    if (redness >= 30) return _Label.red;
+
+    // Brightness for black/white decision
+    final brightness = (r + g + b) ~/ 3;
+
+    // Dark → black, Light → white
+    return brightness < 128 ? _Label.black : _Label.white;
   }
 
   /// Returns the (R, G, B) of the quantized palette color.
