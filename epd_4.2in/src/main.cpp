@@ -190,9 +190,11 @@ static void handleRawClient(WiFiClient &client)
     Debug("\r\n");
 
     if (cmd == CMD_REFRESH) {
-        EPD_4IN2B_V2_TurnOnDisplay();
         g_BlackTopReady = false;
         g_RedTopReady = false;
+        // Don't wait for TurnOnDisplay in TCP handler — too slow (~15s)
+        // Use HTTP /display/refresh instead
+        Debug("TCP: refresh via HTTP recommended\r\n");
         client.stop();
         return;
     }
@@ -227,12 +229,9 @@ static void handleRawClient(WiFiClient &client)
             client.stop();
             return;
         }
-        // Send 0x24 + top half (from buffer) + bottom half (from TCP)
-        EPD_4IN2B_V2_SendCommand(0x24);
-        for (int i = 0; i < IMG_HALF_SIZE; i++) {
-            EPD_4IN2B_V2_SendData(g_ImgBuf[i]);
-        }
-        // Now read bottom half from TCP and send directly to SPI
+        // Send top from buffer
+        EPD_4IN2B_V2_SendHalfBimage(0, g_ImgBuf);
+        // Read bottom half from TCP
         size_t n = client.readBytes(g_ImgBuf, IMG_HALF_SIZE);
         if (n != IMG_HALF_SIZE) {
             Debug("TCP: short read bottom\r\n");
@@ -240,9 +239,8 @@ static void handleRawClient(WiFiClient &client)
             client.stop();
             return;
         }
-        for (int i = 0; i < IMG_HALF_SIZE; i++) {
-            EPD_4IN2B_V2_SendData(g_ImgBuf[i]);
-        }
+        // Send bottom
+        EPD_4IN2B_V2_SendHalfBimage(1, g_ImgBuf);
         g_BlackTopReady = false;
         Debug("TCP: black full sent\r\n");
         client.stop();
@@ -269,10 +267,9 @@ static void handleRawClient(WiFiClient &client)
             client.stop();
             return;
         }
-        EPD_4IN2B_V2_SendCommand(0x26);
-        for (int i = 0; i < IMG_HALF_SIZE; i++) {
-            EPD_4IN2B_V2_SendData(g_ImgBuf[i]);
-        }
+        // Send top from buffer
+        EPD_4IN2B_V2_SendHalfRYimage(0, g_ImgBuf);
+        // Read bottom half from TCP
         size_t n = client.readBytes(g_ImgBuf, IMG_HALF_SIZE);
         if (n != IMG_HALF_SIZE) {
             Debug("TCP: short read bottom\r\n");
@@ -280,9 +277,8 @@ static void handleRawClient(WiFiClient &client)
             client.stop();
             return;
         }
-        for (int i = 0; i < IMG_HALF_SIZE; i++) {
-            EPD_4IN2B_V2_SendData(g_ImgBuf[i]);
-        }
+        // Send bottom
+        EPD_4IN2B_V2_SendHalfRYimage(1, g_ImgBuf);
         g_RedTopReady = false;
         Debug("TCP: red full sent\r\n");
         client.stop();

@@ -146,7 +146,7 @@ def cmd_checker(ip):
     tcp_send(ip, 0x01, make_checker(True))
     tcp_send(ip, 0x02, make_white())
     tcp_send(ip, 0x03, make_white())
-    tcp_send(ip, 0xFF)
+    print(http_post(ip, '/display/refresh'))   # HTTP refresh (更可靠)
     print("完成!")
 
 def cmd_gradient(ip):
@@ -155,8 +155,7 @@ def cmd_gradient(ip):
     tcp_send(ip, 0x01, make_gradient(True))
     tcp_send(ip, 0x02, make_white())
     tcp_send(ip, 0x03, make_white())
-    tcp_send(ip, 0xFF)
-    print("完成!")
+    print(http_post(ip, '/display/refresh'))
 
 def cmd_text(ip):
     print("发送文字...")
