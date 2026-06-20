@@ -126,6 +126,7 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       setState(() => _sendStep = 1);
       _logMessage('发送黑色层上半...');
+      _logMessage('  B-Top hex: ${_hex8(_convertedImage!.blackTop)}');
       await _tcp!.sendBlackTop(_convertedImage!.blackTop);
 
       setState(() => _sendStep = 2);
@@ -134,6 +135,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
       setState(() => _sendStep = 3);
       _logMessage('发送红色层上半...');
+      _logMessage('  R-Top hex: ${_hex8(_convertedImage!.redTop)}');
       await _tcp!.sendRedTop(_convertedImage!.redTop);
 
       setState(() => _sendStep = 4);
@@ -172,6 +174,24 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (e) {
       _logMessage('休眠失败: $e');
     }
+  }
+
+  /// Built-in checkerboard test pattern — verifies TCP path independently.
+  void _testCheckerboard() {
+    final converted = ImageConverter.generateCheckerboard();
+    setState(() {
+      _convertedImage = converted;
+      _sourcePath = null;
+    });
+    final bp = _countColoredPixels(converted.blackTop) +
+        _countColoredPixels(converted.blackBottom);
+    _logMessage('棋盘格测试图案已生成 ✓ 黑色像素: $bp/${_epdWidth * _epdHeight}');
+    _logMessage('  B-Top hex: ${_hex8(converted.blackTop)}');
+  }
+
+  /// Hex dump first 8 bytes of a buffer for debugging.
+  String _hex8(Uint8List data) {
+    return data.take(8).map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ');
   }
 
   /// Count bits set to 0 (colored pixels) in a 1bpp buffer.
@@ -240,9 +260,11 @@ class _HomeScreenState extends State<HomeScreen> {
                           onSend: _sendToDevice,
                           onClear: _clearDevice,
                           onSleep: _sleepDevice,
+                          onTestPattern: _testCheckerboard,
                           canSend: _convertedImage != null && _connected,
                           canClear: _connected,
                           canSleep: _connected,
+                          canTest: _connected,
                         ),
                       ),
                     ],

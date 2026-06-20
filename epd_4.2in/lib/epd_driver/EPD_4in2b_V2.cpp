@@ -86,7 +86,7 @@ function :	send command
 parameter:
      Reg : Command register
 ******************************************************************************/
-static void EPD_4IN2B_V2_SendCommand(UBYTE Reg)
+void EPD_4IN2B_V2_SendCommand(UBYTE Reg)
 {
     DEV_Digital_Write(EPD_DC_PIN, 0);
     DEV_Digital_Write(EPD_CS_PIN, 0);
@@ -99,7 +99,7 @@ function :	send data
 parameter:
     Data : Write data
 ******************************************************************************/
-static void EPD_4IN2B_V2_SendData(UBYTE Data)
+void EPD_4IN2B_V2_SendData(UBYTE Data)
 {
 	DEV_Digital_Write(EPD_DC_PIN, 1);
 	DEV_Digital_Write(EPD_CS_PIN, 0);

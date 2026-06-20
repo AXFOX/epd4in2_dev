@@ -8,9 +8,11 @@ class SendProgress extends StatelessWidget {
   final VoidCallback? onSend;
   final VoidCallback? onClear;
   final VoidCallback? onSleep;
+  final VoidCallback? onTestPattern;
   final bool canSend;
   final bool canClear;
   final bool canSleep;
+  final bool canTest;
 
   const SendProgress({
     super.key,
@@ -20,9 +22,11 @@ class SendProgress extends StatelessWidget {
     this.onSend,
     this.onClear,
     this.onSleep,
+    this.onTestPattern,
     this.canSend = false,
     this.canClear = false,
     this.canSleep = false,
+    this.canTest = false,
   });
 
   static const _stepLabels = [
@@ -70,6 +74,12 @@ class SendProgress extends StatelessWidget {
                   avatar: const Icon(Icons.bedtime, size: 16),
                   label: const Text('休眠', style: TextStyle(fontSize: 12)),
                   onPressed: (canSleep && !sending) ? onSleep : null,
+                  visualDensity: VisualDensity.compact,
+                ),
+                ActionChip(
+                  avatar: const Icon(Icons.grid_on, size: 16),
+                  label: const Text('棋盘格', style: TextStyle(fontSize: 12)),
+                  onPressed: (canTest && !sending) ? onTestPattern : null,
                   visualDensity: VisualDensity.compact,
                 ),
                 const SizedBox(width: 4),

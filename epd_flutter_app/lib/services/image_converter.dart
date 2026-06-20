@@ -232,4 +232,52 @@ class ImageConverter {
   Uint8List _extractHalf(Uint8List full, int offset) {
     return Uint8List.fromList(full.sublist(offset, offset + halfSize));
   }
+
+  /// Generate a checkerboard test pattern (matches Python test_epd.py make_checker).
+  /// Black checkerboard on black layer, all white on red layer.
+  static ConvertedImage generateCheckerboard() {
+    final blackFull = Uint8List(epdWidth * epdHeight ~/ 8);
+    final redFull = Uint8List(epdWidth * epdHeight ~/ 8);
+    _fillStatic(blackFull);
+    _fillStatic(redFull);
+
+    // Black layer: checkerboard (top half normal, bottom half inverted)
+    for (int y = 0; y < epdHeight; y++) {
+      final invert = y >= halfHeight;
+      for (int x = 0; x < epdWidth; x++) {
+        bool black = ((x ~/ 16) + (y ~/ 16)) % 2 == 0;
+        if (invert) black = !black;
+        if (black) {
+          final byteIdx = y * widthBytes + x ~/ 8;
+          final bitIdx = 7 - (x % 8);
+          blackFull[byteIdx] &= ~(1 << bitIdx);
+        }
+      }
+    }
+
+    // Build preview
+    final preview = img.Image(width: epdWidth, height: epdHeight);
+    for (int y = 0; y < epdHeight; y++) {
+      for (int x = 0; x < epdWidth; x++) {
+        final byteIdx = y * widthBytes + x ~/ 8;
+        final bitIdx = 7 - (x % 8);
+        final isBlack = (blackFull[byteIdx] & (1 << bitIdx)) == 0;
+        preview.setPixelRgba(x, y, isBlack ? 0 : 255, 255, 255, 255);
+      }
+    }
+
+    return ConvertedImage(
+      blackTop: Uint8List.fromList(blackFull.sublist(0, halfSize)),
+      blackBottom: Uint8List.fromList(blackFull.sublist(halfSize, halfSize * 2)),
+      redTop: Uint8List.fromList(redFull.sublist(0, halfSize)),
+      redBottom: Uint8List.fromList(redFull.sublist(halfSize, halfSize * 2)),
+      previewPng: Uint8List.fromList(img.encodePng(preview)),
+    );
+  }
+
+  static void _fillStatic(Uint8List buf) {
+    for (int i = 0; i < buf.length; i++) {
+      buf[i] = 0xFF;
+    }
+  }
 }

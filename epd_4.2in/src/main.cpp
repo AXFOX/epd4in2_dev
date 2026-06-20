@@ -105,6 +105,10 @@ static ESP8266WebServer httpServer(80);
 static ESP8266HTTPUpdateServer httpUpdater;
 static WiFiServer rawServer(81);       // TCP raw image port
 static UBYTE *g_ImgBuf = NULL;         // 7500-byte half-screen buffer
+// Flags: true when top half is buffered, waiting for bottom half to
+// send both halves back-to-back (no SPI gap between halves).
+static bool g_BlackTopReady = false;
+static bool g_RedTopReady = false;
 
 static char g_WiFiSSID[32] = WIFI_SSID;
 static char g_WiFiPass[64] = WIFI_PASS;
@@ -187,6 +191,8 @@ static void handleRawClient(WiFiClient &client)
 
     if (cmd == CMD_REFRESH) {
         EPD_4IN2B_V2_TurnOnDisplay();
+        g_BlackTopReady = false;
+        g_RedTopReady = false;
         client.stop();
         return;
     }
@@ -201,32 +207,89 @@ static void handleRawClient(WiFiClient &client)
         }
     }
 
-    // Read exactly IMG_HALF_SIZE bytes with timeout
-    size_t n = client.readBytes(g_ImgBuf, IMG_HALF_SIZE);
-    if (n != IMG_HALF_SIZE) {
-        Debug("TCP: expected ");
-        Debug(String(IMG_HALF_SIZE).c_str());
-        Debug(" got ");
-        Debug(String((int)n).c_str());
-        Debug("\r\n");
+    // ---- Black layer: buffer top, send both on bottom ----
+    if (cmd == CMD_BLACK_TOP) {
+        size_t n = client.readBytes(g_ImgBuf, IMG_HALF_SIZE);
+        if (n != IMG_HALF_SIZE) {
+            Debug("TCP: short read\r\n");
+            client.stop();
+            return;
+        }
+        g_BlackTopReady = true;
+        Debug("TCP: black top buffered\r\n");
         client.stop();
         return;
     }
 
-    // Send to EPD
-    switch (cmd) {
-    case CMD_BLACK_TOP:    
-        EPD_4IN2B_V2_SendHalfBimage(0, g_ImgBuf); break;
-    case CMD_BLACK_BOTTOM: 
-        EPD_4IN2B_V2_SendHalfBimage(1, g_ImgBuf); break;
-    case CMD_RED_TOP:      
-        EPD_4IN2B_V2_SendHalfRYimage(0, g_ImgBuf); break;
-    case CMD_RED_BOTTOM:   
-        EPD_4IN2B_V2_SendHalfRYimage(1, g_ImgBuf); break;
-    default:
-        Debug("TCP: unknown cmd\r\n"); break;
+    if (cmd == CMD_BLACK_BOTTOM) {
+        if (!g_BlackTopReady) {
+            Debug("TCP: black bottom without top!\r\n");
+            client.stop();
+            return;
+        }
+        // Send 0x24 + top half (from buffer) + bottom half (from TCP)
+        EPD_4IN2B_V2_SendCommand(0x24);
+        for (int i = 0; i < IMG_HALF_SIZE; i++) {
+            EPD_4IN2B_V2_SendData(g_ImgBuf[i]);
+        }
+        // Now read bottom half from TCP and send directly to SPI
+        size_t n = client.readBytes(g_ImgBuf, IMG_HALF_SIZE);
+        if (n != IMG_HALF_SIZE) {
+            Debug("TCP: short read bottom\r\n");
+            g_BlackTopReady = false;
+            client.stop();
+            return;
+        }
+        for (int i = 0; i < IMG_HALF_SIZE; i++) {
+            EPD_4IN2B_V2_SendData(g_ImgBuf[i]);
+        }
+        g_BlackTopReady = false;
+        Debug("TCP: black full sent\r\n");
+        client.stop();
+        return;
     }
 
+    // ---- Red layer: same back-to-back approach ----
+    if (cmd == CMD_RED_TOP) {
+        size_t n = client.readBytes(g_ImgBuf, IMG_HALF_SIZE);
+        if (n != IMG_HALF_SIZE) {
+            Debug("TCP: short read\r\n");
+            client.stop();
+            return;
+        }
+        g_RedTopReady = true;
+        Debug("TCP: red top buffered\r\n");
+        client.stop();
+        return;
+    }
+
+    if (cmd == CMD_RED_BOTTOM) {
+        if (!g_RedTopReady) {
+            Debug("TCP: red bottom without top!\r\n");
+            client.stop();
+            return;
+        }
+        EPD_4IN2B_V2_SendCommand(0x26);
+        for (int i = 0; i < IMG_HALF_SIZE; i++) {
+            EPD_4IN2B_V2_SendData(g_ImgBuf[i]);
+        }
+        size_t n = client.readBytes(g_ImgBuf, IMG_HALF_SIZE);
+        if (n != IMG_HALF_SIZE) {
+            Debug("TCP: short read bottom\r\n");
+            g_RedTopReady = false;
+            client.stop();
+            return;
+        }
+        for (int i = 0; i < IMG_HALF_SIZE; i++) {
+            EPD_4IN2B_V2_SendData(g_ImgBuf[i]);
+        }
+        g_RedTopReady = false;
+        Debug("TCP: red full sent\r\n");
+        client.stop();
+        return;
+    }
+
+    Debug("TCP: unknown cmd\r\n");
     client.stop();
 }
 

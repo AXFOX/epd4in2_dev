@@ -47,4 +47,8 @@ void EPD_4IN2B_V2_Sleep(void);
 void EPD_4IN2B_V2_TurnOnDisplay(void);
 void EPD_4IN2B_V2_TurnOnDisplay_4Gray(void);
 
+// Low-level SPI access for streaming data without buffer gaps
+void EPD_4IN2B_V2_SendCommand(UBYTE Reg);
+void EPD_4IN2B_V2_SendData(UBYTE Data);
+
 #endif

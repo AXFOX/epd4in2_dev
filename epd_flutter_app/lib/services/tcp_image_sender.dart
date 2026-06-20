@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 
 /// TCP command bytes for the EPD image protocol (port 81).
@@ -9,10 +11,6 @@ const _cmdRedBottom = 0x03;
 const _cmdRefresh = 0xFF;
 
 /// Sends raw half-screen bitmap data to ESP8266 via TCP port 81.
-///
-/// Each call opens a fresh TCP connection, sends 1 command byte + optional
-/// 7500-byte payload, then closes. This matches the device's per-connection
-/// transaction model.
 class TcpImageSender {
   final String host;
   final int port;
@@ -24,20 +22,35 @@ class TcpImageSender {
     this.timeout = const Duration(seconds: 10),
   });
 
-  /// Send a single command + optional data chunk.
+  /// Send command + optional 7500-byte payload using RawSocket for
+  /// reliable half-close (shutdown send) semantics.
   Future<void> _send(int cmd, [Uint8List? data]) async {
-    final socket = await Socket.connect(host, port, timeout: timeout);
+    // Build the full packet upfront
+    final payloadLen = data?.length ?? 0;
+    final packetLen = 1 + payloadLen;
+    final packet = Uint8List(packetLen);
+    packet[0] = cmd;
+    if (data != null) packet.setAll(1, data);
+
+    final socket = await RawSocket.connect(host, port, timeout: timeout);
     try {
-      socket.add([cmd]);
-      if (data != null) {
-        assert(data.length == 7500,
-            'Half-screen chunk must be exactly 7500 bytes, got ${data.length}');
-        socket.add(data);
+      // Send ALL data in a loop — write() may return short
+      int offset = 0;
+      while (offset < packetLen) {
+        final sent = socket.write(packet, offset, packetLen - offset);
+        if (sent <= 0) throw SocketException('TCP write returned $sent');
+        offset += sent;
       }
-      await socket.flush();
-      await socket.close();
+
+      // Half-close: shutdown send direction → sends FIN, flushes buffer.
+      // ESP8266's readBytes() will receive all bytes then see EOF.
+      socket.shutdown(SocketDirection.send);
+
+      // Wait briefly for the FIN to propagate, then close fully.
+      await Future.delayed(const Duration(milliseconds: 30));
+      socket.close();
     } catch (e) {
-      socket.destroy();
+      socket.close();
       rethrow;
     }
   }
