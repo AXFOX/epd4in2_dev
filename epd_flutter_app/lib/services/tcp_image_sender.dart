@@ -45,10 +45,9 @@ class TcpImageSender {
       socket.add(packet);
       await socket.flush();
 
-      // Give ESP8266 time to receive and buffer all 7500 bytes.
-      // lwIP receive window ≈ 5840 bytes; data arrives in ~5 TCP segments.
-      // Wait briefly, then attempt to read an optional ACK from device.
-      await Future<void>.delayed(const Duration(milliseconds: 300));
+      // Give ESP8266 time to receive all 7500 bytes via readWithYield().
+      // ESP8266 lwIP TCP_WND=8760, payload=7501 bytes — needs ~1-2 RTT.
+      await Future<void>.delayed(const Duration(milliseconds: 500));
 
       // Wait for optional ACK ('OK\n') from device with a short timeout.
       try {
