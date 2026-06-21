@@ -16,7 +16,7 @@
 
 #include <Wire.h>
 
-#define USE_DEBUG 1
+#define USE_DEBUG 0
 #define DEBUG_BUSY 0  // Set to 1 to log e-paper busy/release events
 #if USE_DEBUG
 #define Debug(__info) Serial.print(__info)

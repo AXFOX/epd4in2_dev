@@ -76,11 +76,25 @@ HALF_SIZE = 7500
 WIDTH_BYTES = 50
 
 def tcp_send(ip, cmd, data=b''):
-    """通过 TCP port 81 发送命令"""
+    """通过 TCP port 81 发送命令，等待设备 ACK 后关闭"""
+    import time as _time
     s = socket.socket()
-    s.settimeout(5)
+    s.settimeout(15)
     s.connect((ip, 81))
     s.sendall(bytes([cmd]) + data)
+    # ESP8266 lwIP TCP window ~5840 < 7500 payload.
+    # Give ample time for TCP flow control to deliver all data.
+    _time.sleep(2.0)
+    try:
+        ack = s.recv(16)
+        if ack:
+            print(f"  ACK: {ack.decode().strip()}")
+        else:
+            print(f"  (empty for 0x{cmd:02X})")
+    except socket.timeout:
+        print(f"  (timeout 0x{cmd:02X})")
+    except Exception as e:
+        print(f"  (err 0x{cmd:02X}: {e})")
     s.close()
 
 def http_post(ip, path, body=''):
@@ -173,6 +187,30 @@ def cmd_text(ip):
     http_post(ip, '/display/refresh')
     print("完成!")
 
+def cmd_red_test(ip):
+    """专门测试红色层：黑层全白，红层右半红色"""
+    print("红色层测试...")
+    HALF = 7500
+    W = 50  # bytes per row
+    # 黑层全白
+    white = b'\xff' * HALF
+    tcp_send(ip, 0x00, white)
+    tcp_send(ip, 0x01, white)
+    # 红层：上半右半红，下半右半红
+    def make_red_half():
+        img = bytearray(HALF)
+        for y in range(150):
+            for x_byte in range(W):
+                if x_byte >= 25:  # right half of screen (x >= 200)
+                    img[x_byte + y * W] = 0x00  # all red
+                else:
+                    img[x_byte + y * W] = 0xFF  # white
+        return bytes(img)
+    tcp_send(ip, 0x02, make_red_half())
+    tcp_send(ip, 0x03, make_red_half())
+    print(http_post(ip, '/display/refresh'))
+    print("完成!")
+
 def cmd_all(ip):
     cmd_status(ip)
     time.sleep(1)
@@ -192,7 +230,7 @@ if __name__ == '__main__':
     cmd = sys.argv[2] if len(sys.argv) > 2 else 'all'
     
     cmds = {'status':cmd_status, 'clear':cmd_clear, 'checker':cmd_checker,
-            'gradient':cmd_gradient, 'text':cmd_text, 'all':cmd_all}
+            'gradient':cmd_gradient, 'text':cmd_text, 'redtest':cmd_red_test, 'all':cmd_all}
     if cmd in cmds:
         cmds[cmd](ip)
     else:

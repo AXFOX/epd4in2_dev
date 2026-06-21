@@ -47,8 +47,27 @@ class TcpImageSender {
 
       // Give ESP8266 time to receive and buffer all 7500 bytes.
       // lwIP receive window ≈ 5840 bytes; data arrives in ~5 TCP segments.
-      // 2s is conservative to allow full transfer + ESP processing.
-      await Future<void>.delayed(const Duration(seconds: 2));
+      // Wait briefly, then attempt to read an optional ACK from device.
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+
+      // Wait for optional ACK ('OK\n') from device with a short timeout.
+      try {
+        final completer = Completer<List<int>>();
+        final subscription = socket.listen((data) {
+          if (!completer.isCompleted) completer.complete(data);
+        }, onError: (e) {
+          if (!completer.isCompleted) completer.completeError(e);
+        }, onDone: () {
+          if (!completer.isCompleted) completer.complete(<int>[]);
+        });
+        final data = await completer.future.timeout(const Duration(seconds: 2));
+        if (data.isNotEmpty) {
+          if (kDebugMode) print('EPD ACK: ${String.fromCharCodes(data)}');
+        }
+        await subscription.cancel();
+      } catch (_) {
+        // ignore timeout or read errors
+      }
 
       await socket.close();
     } catch (e) {

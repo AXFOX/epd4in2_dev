@@ -146,3 +146,15 @@ HTTP API（常用）
 ----
 
 更多技术细节请参阅 `AGENTS.md` 与 `epd_4.2in/` 下的源代码。
+
+## 更新日志
+
+### 2025-06-22 — v1.1 关键修复
+
+| # | 问题 | 根因 | 修复 |
+|---|------|------|------|
+| 1 | 串口乱码（115200 二进制噪声） | ESP8266 SDK 内部 `os_printf` 绕过 Arduino `Serial` 直接写 UART0 | `setup()` 开头调用 `system_set_os_print(0)` |
+| 2 | 必须先清屏再发图才能显示 | `TurnOnDisplay()` 后 EPD RAM 地址指针停留在末尾，后续 `0x24`/`0x26` 写入未复位 | `SendHalfBimage(0)` / `SendHalfRYimage(0)` 中加 `SetWindows` + `SetCursor(0,0)` |
+| 3 | 红色层不显示 | `SetCursor` 函数缺 `Xstart>>3`（像素→字节转换）；`WiFiClient::readBytes()` 阻塞不 yield 导致 lwIP TCP 窗口死锁 | 修正 `(Xstart>>3)`；实现 `readWithYield()` 替代 `readBytes()` |
+| 4 | TCP 数据包丢失 | `rawServer.accept()` 后 `client.connected()` 可能短暂返回 false 导致连接被跳过 | 移除 `raw.connected()` 检查 |
+| 5 | 7500 字节超过 TCP 接收窗口 | ESP8266 lwIP 默认 `TCP_WND=5840` | `platformio.ini` 添加 `-DTCP_WND=8760` |

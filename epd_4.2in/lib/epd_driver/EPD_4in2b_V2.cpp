@@ -30,7 +30,7 @@
 #include "EPD_4in2b_V2.h"
 #include "Debug.h"
 
-const unsigned char LUT_ALL[233]={
+const unsigned char LUT_ALL[233]={							
 0x01,	0x0A,	0x1B,	0x0F,	0x03,	0x01,	0x01,	
 0x05,	0x0A,	0x01,	0x0A,	0x01,	0x01,	0x01,	
 0x05,	0x08,	0x03,	0x02,	0x04,	0x01,	0x01,	
@@ -86,7 +86,7 @@ function :	send command
 parameter:
      Reg : Command register
 ******************************************************************************/
-void EPD_4IN2B_V2_SendCommand(UBYTE Reg)
+static void EPD_4IN2B_V2_SendCommand(UBYTE Reg)
 {
     DEV_Digital_Write(EPD_DC_PIN, 0);
     DEV_Digital_Write(EPD_CS_PIN, 0);
@@ -99,7 +99,7 @@ function :	send data
 parameter:
     Data : Write data
 ******************************************************************************/
-void EPD_4IN2B_V2_SendData(UBYTE Data)
+static void EPD_4IN2B_V2_SendData(UBYTE Data)
 {
 	DEV_Digital_Write(EPD_DC_PIN, 1);
 	DEV_Digital_Write(EPD_CS_PIN, 0);
@@ -113,15 +113,11 @@ parameter:
 ******************************************************************************/
 void EPD_4IN2B_V2_ReadBusy(void)
 {
-#if DEBUG_BUSY
     Debug("e-Paper busy\r\n");
-#endif
     while(DEV_Digital_Read(EPD_BUSY_PIN) == 1) {      //LOW: idle, HIGH: busy
         DEV_Delay_ms(10);
     }
-#if DEBUG_BUSY
     Debug("e-Paper busy release\r\n");
-#endif
 }
 
 /******************************************************************************
@@ -167,7 +163,7 @@ parameter:
 static void EPD_4IN2B_V2_SetCursor(UWORD Xstart, UWORD Ystart)
 {
     EPD_4IN2B_V2_SendCommand(0x4E); // SET_RAM_X_ADDRESS_COUNTER
-    EPD_4IN2B_V2_SendData(Xstart & 0xFF);
+    EPD_4IN2B_V2_SendData((Xstart>>3) & 0xFF);
 
     EPD_4IN2B_V2_SendCommand(0x4F); // SET_RAM_Y_ADDRESS_COUNTER
     EPD_4IN2B_V2_SendData(Ystart & 0xFF);
@@ -184,6 +180,11 @@ void EPD_4IN2B_V2_Init(void)
 	EPD_4IN2B_V2_ReadBusy();   
 	EPD_4IN2B_V2_SendCommand(0x12);  //SWRESET
 	EPD_4IN2B_V2_ReadBusy();   
+
+	//EPD_4IN2B_V2_SendCommand(0x01); //Driver output control      
+	//EPD_4IN2B_V2_SendData(0xf9);
+	//EPD_4IN2B_V2_SendData(0x00);
+	//EPD_4IN2B_V2_SendData(0x00);
 
 	EPD_4IN2B_V2_SendCommand(0x11); //data entry mode       
 	EPD_4IN2B_V2_SendData(0x03);
@@ -208,7 +209,7 @@ static void EPD_4IN2B_V2_4Gray_lut(void)
 {
     unsigned char i;
 
-    //WS byte 0~152, the content of VS[nX-LUTm], TP[n], RP[n], SR[nXY], FR[n] and XON[nXY]
+    //WS byte 0~152, the content of VS[nX-LUTm], TP[nX], RP[n], SR[nXY], FR[n] and XON[nXY]
     EPD_4IN2B_V2_SendCommand(0x32);					
     for(i=0;i<227;i++)
     {
@@ -305,12 +306,14 @@ void EPD_4IN2B_V2_Display(const UBYTE *blackimage, const UBYTE *ryimage)
 	Width = (EPD_4IN2B_V2_WIDTH % 8 == 0)? (EPD_4IN2B_V2_WIDTH / 8 ): (EPD_4IN2B_V2_WIDTH / 8 + 1);
 	Height = EPD_4IN2B_V2_HEIGHT;
 
+
 	EPD_4IN2B_V2_SendCommand(0x24);
 	for (UWORD j = 0; j < Height; j++) {
 		for (UWORD i = 0; i < Width; i++) {
 			EPD_4IN2B_V2_SendData(blackimage[i + j * Width]);
 		}
 	}
+
    
 	EPD_4IN2B_V2_SendCommand(0x26);
 	for (UWORD j = 0; j < Height; j++) {
@@ -319,6 +322,7 @@ void EPD_4IN2B_V2_Display(const UBYTE *blackimage, const UBYTE *ryimage)
 		}
 	}
 	
+
 	EPD_4IN2B_V2_TurnOnDisplay();
 }
 
@@ -333,6 +337,8 @@ void EPD_4IN2B_V2_Display_4Gray(const UBYTE *Image)
 *********************************/
   
 	EPD_4IN2B_V2_SendCommand(0x24);	       
+	// EPD_4IN2_HEIGHT
+	// EPD_4IN2_WIDTH
 	for(m = 0; m<EPD_4IN2B_V2_HEIGHT;m++)
 		for(i=0;i<EPD_4IN2B_V2_WIDTH/8;i++)
 		{
@@ -392,8 +398,8 @@ void EPD_4IN2B_V2_Display_4Gray(const UBYTE *Image)
 						temp3 |= 0x00;  //black
 					else if(temp2 == 0x80) 
 						temp3 |= 0x01;  //gray1
-					else    //0x40
-							temp3 |= 0x00;	//gray2
+					else //0x40
+						temp3 |= 0x00; //gray2
 					temp3 <<= 1;	
 					
 					temp1 <<= 2;
@@ -428,6 +434,10 @@ void EPD_4IN2B_V2_SendHalfBimage(char TopOrBottom, const UBYTE *image)
 	Height = EPD_4IN2B_V2_HEIGHT;
 
 	if(TopOrBottom == 0) { //the top half screen
+		// Reset address pointer before new black layer write.
+		// After TurnOnDisplay the pointer is at end of RAM.
+		EPD_4IN2B_V2_SetWindows(0, 0, EPD_4IN2B_V2_WIDTH-1, EPD_4IN2B_V2_HEIGHT-1);
+		EPD_4IN2B_V2_SetCursor(0, 0);
 		EPD_4IN2B_V2_SendCommand(0x24);
 		Debug("send the top half black screen\r\n");
 		for (UWORD j = 0; j < Height / 2; j++) {
@@ -452,6 +462,9 @@ void EPD_4IN2B_V2_SendHalfRYimage(char TopOrBottom, const UBYTE *image)
 	Height = EPD_4IN2B_V2_HEIGHT;
 
 	if(TopOrBottom == 0) { //the top half screen
+		// Reset address pointer before new red layer write.
+		EPD_4IN2B_V2_SetWindows(0, 0, EPD_4IN2B_V2_WIDTH-1, EPD_4IN2B_V2_HEIGHT-1);
+		EPD_4IN2B_V2_SetCursor(0, 0);
 		EPD_4IN2B_V2_SendCommand(0x26);
 		Debug("send the top half red screen\r\n");
 		for (UWORD j = 0; j < Height / 2; j++) {

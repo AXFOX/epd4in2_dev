@@ -72,6 +72,7 @@
 #include <ESP8266HTTPUpdateServer.h>
 #include <ESP8266mDNS.h>
 #include <WiFiClient.h>
+#include <user_interface.h>
 
 #include "DEV_Config.h"
 #include "EPD_4in2b_V2.h"
@@ -176,11 +177,45 @@ static void handleRoot(void)
 }
 
 // ============================================================
+// Non-blocking read: yields to lwIP between chunks.
+// readBytes() blocks without yielding, causing TCP deadlock when
+// payload (7500 bytes) exceeds receive window (~5840 bytes).
+// ============================================================
+static size_t readWithYield(WiFiClient &client, uint8_t *buf, size_t len, int timeoutMs = 5000)
+{
+    size_t total = 0;
+    unsigned long start = millis();
+    while (total < len && (millis() - start < (unsigned long)timeoutMs)) {
+        int avail = client.available();
+        if (avail > 0) {
+            size_t chunk = (size_t)avail > (len - total) ? (len - total) : (size_t)avail;
+            int n = client.read(buf + total, chunk);
+            if (n > 0) total += n;
+        } else {
+            yield();
+            delay(5);
+        }
+    }
+    return total;
+}
+
+// Faster version for after SPI writes (data already mostly buffered)
+static size_t readFast(WiFiClient &client, uint8_t *buf, size_t len, int timeoutMs = 3000)
+{
+    unsigned long start = millis();
+    // Let lwIP accumulate the data first
+    while (client.available() < (int)len && (millis() - start < (unsigned long)timeoutMs)) {
+        yield();
+        delay(2);
+    }
+    if (client.available() >= (int)len) {
+        return client.readBytes(buf, len);
+    }
+    return readWithYield(client, buf, len, timeoutMs);
+}
+
+// ============================================================
 // TCP 图像处理 (:81)
-//
-// 内存策略: g_ImgBuf 懒惰分配，只在首次 TCP 连接时 malloc。
-// 不会与 HTTP body String 同时存在（TCP 直接读入缓冲区，
-// 无服务器侧 body 字符串），峰值内存 ~7500 字节。
 // ============================================================
 static void handleRawClient(WiFiClient &client)
 {
@@ -188,15 +223,11 @@ static void handleRawClient(WiFiClient &client)
     int cmd = client.read();
     if (cmd < 0) return;
 
-    Debug("TCP cmd=");
-    Debug(String(cmd, HEX).c_str());
-    Debug("\r\n");
+    Debug("TCP cmd="); Debug(String(cmd, HEX).c_str()); Debug("\r\n");
 
     if (cmd == CMD_REFRESH) {
         g_BlackTopReady = false;
         g_RedTopReady = false;
-        // Don't wait for TurnOnDisplay in TCP handler — too slow (~15s)
-        // Use HTTP /display/refresh instead
         Debug("TCP: refresh via HTTP recommended\r\n");
         client.stop();
         return;
@@ -212,79 +243,51 @@ static void handleRawClient(WiFiClient &client)
         }
     }
 
-    // ---- Black layer: buffer top, send both on bottom ----
+    // ---- Black layer ----
     if (cmd == CMD_BLACK_TOP) {
-        size_t n = client.readBytes(g_ImgBuf, IMG_HALF_SIZE);
-        if (n != IMG_HALF_SIZE) {
-            Debug("TCP: short read\r\n");
-            client.stop();
-            return;
-        }
+        size_t n = readWithYield(client, g_ImgBuf, IMG_HALF_SIZE);
+        if (n != IMG_HALF_SIZE) { Debug("TCP: short read\r\n"); client.stop(); return; }
         g_BlackTopReady = true;
+        g_TcpRxCount++;
         Debug("TCP: black top buffered\r\n");
-        client.stop();
+        client.write("OK\n"); client.stop();
         return;
     }
 
     if (cmd == CMD_BLACK_BOTTOM) {
-        if (!g_BlackTopReady) {
-            Debug("TCP: black bottom without top!\r\n");
-            client.stop();
-            return;
-        }
-        // Send top from buffer
+        if (!g_BlackTopReady) { Debug("TCP: black bottom without top!\r\n"); client.stop(); return; }
         EPD_4IN2B_V2_SendHalfBimage(0, g_ImgBuf);
-        // Read bottom half from TCP
-        size_t n = client.readBytes(g_ImgBuf, IMG_HALF_SIZE);
-        if (n != IMG_HALF_SIZE) {
-            Debug("TCP: short read bottom\r\n");
-            g_BlackTopReady = false;
-            client.stop();
-            return;
-        }
-        // Send bottom
+        size_t n = readFast(client, g_ImgBuf, IMG_HALF_SIZE);
+        if (n != IMG_HALF_SIZE) { Debug("TCP: short read bottom\r\n"); g_BlackTopReady = false; client.stop(); return; }
         EPD_4IN2B_V2_SendHalfBimage(1, g_ImgBuf);
         g_BlackTopReady = false;
+        g_TcpRxCount++;
         Debug("TCP: black full sent\r\n");
-        client.stop();
+        client.write("OK\n"); client.stop();
         return;
     }
 
-    // ---- Red layer: same back-to-back approach ----
+    // ---- Red layer ----
     if (cmd == CMD_RED_TOP) {
-        size_t n = client.readBytes(g_ImgBuf, IMG_HALF_SIZE);
-        if (n != IMG_HALF_SIZE) {
-            Debug("TCP: short read\r\n");
-            client.stop();
-            return;
-        }
+        size_t n = readWithYield(client, g_ImgBuf, IMG_HALF_SIZE);
+        if (n != IMG_HALF_SIZE) { Debug("TCP: short read\r\n"); client.stop(); return; }
         g_RedTopReady = true;
+        g_TcpRxCount++;
         Debug("TCP: red top buffered\r\n");
-        client.stop();
+        client.write("OK\n"); client.stop();
         return;
     }
 
     if (cmd == CMD_RED_BOTTOM) {
-        if (!g_RedTopReady) {
-            Debug("TCP: red bottom without top!\r\n");
-            client.stop();
-            return;
-        }
-        // Send top from buffer
+        if (!g_RedTopReady) { Debug("TCP: red bottom without top!\r\n"); client.stop(); return; }
         EPD_4IN2B_V2_SendHalfRYimage(0, g_ImgBuf);
-        // Read bottom half from TCP
-        size_t n = client.readBytes(g_ImgBuf, IMG_HALF_SIZE);
-        if (n != IMG_HALF_SIZE) {
-            Debug("TCP: short read bottom\r\n");
-            g_RedTopReady = false;
-            client.stop();
-            return;
-        }
-        // Send bottom
+        size_t n = readFast(client, g_ImgBuf, IMG_HALF_SIZE);
+        if (n != IMG_HALF_SIZE) { Debug("TCP: short read bottom\r\n"); g_RedTopReady = false; client.stop(); return; }
         EPD_4IN2B_V2_SendHalfRYimage(1, g_ImgBuf);
         g_RedTopReady = false;
+        g_TcpRxCount++;
         Debug("TCP: red full sent\r\n");
-        client.stop();
+        client.write("OK\n"); client.stop();
         return;
     }
 
@@ -449,6 +452,9 @@ static void setupWiFi(void)
 // ============================================================
 void setup()
 {
+    // Disable SDK-level os_printf to UART0 (bypasses Arduino Serial)
+    system_set_os_print(0);
+
     DEV_Module_Init();
 
     Debug("\r\n========================================\r\n");
@@ -500,7 +506,9 @@ void loop()
 
     // Handle raw TCP image connections
     WiFiClient raw = rawServer.accept();
-    if (raw && raw.connected()) {
+    if (raw) {
+        // Small delay to let lwIP stabilize the connection
+        delay(50);
         handleRawClient(raw);
     }
 
