@@ -113,11 +113,15 @@ parameter:
 ******************************************************************************/
 void EPD_4IN2B_V2_ReadBusy(void)
 {
+#if DEBUG_BUSY
     Debug("e-Paper busy\r\n");
+#endif
     while(DEV_Digital_Read(EPD_BUSY_PIN) == 1) {      //LOW: idle, HIGH: busy
         DEV_Delay_ms(10);
     }
+#if DEBUG_BUSY
     Debug("e-Paper busy release\r\n");
+#endif
 }
 
 /******************************************************************************

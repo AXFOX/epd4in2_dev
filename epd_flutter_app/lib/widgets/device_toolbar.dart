@@ -95,7 +95,7 @@ class _DeviceToolbarState extends State<DeviceToolbar> {
                 FilledButton.icon(
                   onPressed: _connect,
                   icon: Icon(widget.connected ? Icons.refresh : Icons.play_arrow),
-                  label: Text(widget.connected ? '刷新' : '连接'),
+                  label: Text(widget.connected ? '重新连接' : '连接'),
                 ),
                 const SizedBox(width: 4),
                 IconButton(
