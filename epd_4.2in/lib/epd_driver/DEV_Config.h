@@ -48,6 +48,7 @@
 #define EPD_RST_PIN  2
 #define EPD_DC_PIN   4
 #define EPD_BUSY_PIN 5
+#define BOOT0_PIN    0   // IO0 on NodeMCU, flash button; used as reboot key while running
 
 #define GPIO_PIN_SET   1
 #define GPIO_PIN_RESET 0

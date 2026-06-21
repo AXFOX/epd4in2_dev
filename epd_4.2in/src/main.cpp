@@ -480,10 +480,23 @@ void setup()
 // ============================================================
 // Loop
 // ============================================================
+static bool g_RebootButtonPressed = false;
+
 void loop()
 {
     httpServer.handleClient();
     MDNS.update();
+
+    // Reboot key on IO0 (BOOT0 pin on NodeMCU)
+    bool rebootPressed = (digitalRead(BOOT0_PIN) == LOW);
+    if (rebootPressed && !g_RebootButtonPressed) {
+        delay(50);
+        if (digitalRead(BOOT0_PIN) == LOW) {
+            Debug("IO0 pressed, restarting...\r\n");
+            ESP.restart();
+        }
+    }
+    g_RebootButtonPressed = rebootPressed;
 
     // Handle raw TCP image connections
     WiFiClient raw = rawServer.accept();
